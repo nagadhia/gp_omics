@@ -3,8 +3,6 @@
 //  GP_omics_parallel
 //
 //  Created by on 15/01/2025.
-//
-
 
 
 #include <iostream>
@@ -216,7 +214,9 @@ int main() {
     
     mat X;
     
-    X.load("/Users/zhangyue/Desktop/ZhangY/GP_omics/data.csv", csv_ascii); //need to change the path
+    X.load("/Users/nandini.gadhia/Documents/projects/gp_omics/data_rvc/fulldata(after_PCA).csv", csv_ascii); //need to change the path
+    
+    cout << "Data loaded" << endl;
 
     mat X_all = X.cols(0, 72);
     
@@ -226,9 +226,9 @@ int main() {
     
     int train_size = 70;
     
-    int n_splits = 100; // number of the trails
+    int n_splits = 40; // number of the trails
     
-    int n_iter = 10000; // number of the interation for MCMC
+    int n_iter = 1000; // number of the interation for MCMC
 
     vec step_size_theta = ones<vec>(3) * 0.1;
     
@@ -257,7 +257,7 @@ int main() {
         vec y_test = y_all.rows(test_idx);
 
         // save data
-        string base_path = "/Users/zhangyue/Desktop/ZhangY/GP_omics/split_" + to_string(i); // the path for saving data
+        string base_path = "/Users/nandini.gadhia/Documents/projects/gp_omics/GP_OMICS/outdir/split_" + to_string(i); // the path for saving data
         X_train.save(base_path + "_X_train.csv", csv_ascii);
         y_train.save(base_path + "_Y_train.csv", csv_ascii);
         X_test.save(base_path + "_X_test.csv", csv_ascii);

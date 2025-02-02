@@ -1,0 +1,4 @@
+.vscode
+build
+data_rvc
+vcpkg*

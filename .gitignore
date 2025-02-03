@@ -2,3 +2,4 @@
 build
 data_rvc
 vcpkg*
+GP_omics/outdir*

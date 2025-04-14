@@ -76,7 +76,13 @@ vec GPC_Predict(const mat &X_train, const vec &y_train, const mat &X_test, const
     mat predictions(X_test.n_rows, param_samples.n_rows, fill::zeros);
     for (uword iter = 0; iter < param_samples.n_rows; ++iter) {
         const vec& theta = param_samples.row(iter).t();
-        mat K = KernelMatrix(X_train, X_train, theta) + 1e-6 * eye(X_train.n_rows, X_train.n_rows);
+        mat K = KernelMatrix(X_train, X_train, theta);
+
+        double regularization_strength = 1e-4; // Regularisation
+        K += regularization_strength * eye(X_train.n_rows, X_train.n_rows);
+
+        //mat K = KernelMatrix(X_train, X_train, theta) + 1e-6 * eye(X_train.n_rows, X_train.n_rows);
+        
         mat K_inv = pinv(K);
         mat K_test_train = KernelMatrix(X_test, X_train, theta);
 
@@ -91,18 +97,20 @@ int main() {
 
     //load data
     mat X;
-    X.load("/Users/nandini.gadhia/Documents/projects/gp_omics/data_rvc/OTU_table_umap.csv", csv_ascii);
+    X.load("/Users/nandini.gadhia/Documents/projects/gp_omics/data_rvc/attributes_pca.csv", csv_ascii);
     //X.load("/Users/nandini.gadhia/Documents/projects/gp_omics/data_rvc/fulldata(after_PCA).csv", csv_ascii); //need to change the path
     
     cout << "Data loaded!" << endl;
 
     int num_features = X.n_cols - 1;
+
+    cout << num_features << " features" << endl;
     mat X_all = X.cols(0, num_features - 1);
     vec y_all = X.col(num_features);
     int total_samples = X_all.n_rows;
     int train_size = 70;
 
-    int n_splits = 40; // number of the trails
+    int n_splits = 60; // number of the trails
 
     int n_iter = 1000; // number of the interation for MCMC
 
@@ -131,7 +139,7 @@ int main() {
         vec y_test = y_all.rows(test_idx);
 
         // Make output directory if it doesn't exist
-        string outdir = "/Users/nandini.gadhia/Documents/projects/gp_omics/GP_OMICS/outdir_nan_umap/"; // the path for saving data
+        string outdir = "/Users/nandini.gadhia/Documents/projects/gp_omics/GP_OMICS/outdir_nan_attributes/"; // the path for saving data
         system(("mkdir -p " + outdir).c_str());
 
         string base_path = outdir + "split_" + to_string(i);
@@ -160,7 +168,7 @@ int main() {
 
         // Save predictions
         Pred_Y_mean.save(base_path + "_Pred_Y_mean.csv", csv_ascii);
-        cout << Pred_Y_mean << endl;
+        //cout << Pred_Y_mean << endl;
 
         vec Pred_Y_mean_01 = conv_to<vec>::from(Pred_Y_mean > 0.5);
 

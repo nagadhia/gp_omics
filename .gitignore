@@ -1,5 +1,6 @@
 .vscode
 build
-data_rvc
 vcpkg*
 GP_omics/outdir*
+/Users/nandini.gadhia/Documents/projects/gp_omics/microbiome_network_analysis_outputs/Users/nandini.gadhia/Documents/projects/gp_omics/microbiome_network_analysis_outputs
+data

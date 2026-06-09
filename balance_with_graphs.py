@@ -433,6 +433,9 @@ def run_graphs_cli(
     matrices_only: bool,
     no_pearson: bool,
     no_progress: bool,
+    spearman: bool = False,
+    spearman_threshold: float = 0.3,
+    spearman_topk: int = 10000,
 ) -> None:
     cmd = [
         sys.executable, str(graphs_script), "bootstrap",
@@ -453,6 +456,9 @@ def run_graphs_cli(
         cmd.append("--matrices-only")
     if no_pearson:
         cmd.append("--no-pearson")
+    if spearman:
+        cmd += ["--spearman", "--spearman-threshold", str(spearman_threshold),
+                "--spearman-topk", str(spearman_topk)]
     if no_progress:
         cmd.append("--no-progress")
 
@@ -503,6 +509,9 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--matrices-only", action="store_true")
     p.add_argument("--no-pearson", action="store_true")
+    p.add_argument("--spearman", action="store_true")
+    p.add_argument("--spearman-threshold", type=float, default=0.3)
+    p.add_argument("--spearman-topk", type=int, default=10000)
     p.add_argument("--no-progress", action="store_true")
 
     args = p.parse_args()
@@ -572,6 +581,9 @@ def main():
             matrices_only=args.matrices_only,
             no_pearson=args.no_pearson,
             no_progress=args.no_progress,
+            spearman=args.spearman,
+            spearman_threshold=args.spearman_threshold,
+            spearman_topk=args.spearman_topk,
         )
         print(f"[DONE] Graph outputs at: {graphs_out}")
 

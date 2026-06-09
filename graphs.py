@@ -223,6 +223,24 @@ def compute_feature_corr_lioness_fast(df_cond: pd.DataFrame, jobs: int = -1, pro
     return {sid: Es for sid, Es in results}
 
 
+def compute_feature_corr_lioness_spearman(df_cond: pd.DataFrame, jobs: int = -1, progress: bool = True) -> Dict[str, np.ndarray]:
+    """Per-sample feature-feature Spearman LIONESS matrices.
+
+    Rank-transforms each column (average ties) across all samples, then applies
+    the same Pearson LIONESS formula on the ranked data.  This is the standard
+    approximation used in the LIONESS literature and is exact when no ties exist.
+
+    df_cond: rows=samples, cols=features
+    Returns: {sample_id -> matrix (F x F)}
+    """
+    from scipy.stats import rankdata
+    X_raw = df_cond.to_numpy(dtype=np.float64)
+    # Column-wise rank transform (average ties), then standardise to [0,1] for numeric stability
+    X_ranked = np.apply_along_axis(rankdata, 0, X_raw, method="average")
+    df_ranked = pd.DataFrame(X_ranked, index=df_cond.index, columns=df_cond.columns)
+    return compute_feature_corr_lioness_fast(df_ranked, jobs=jobs, progress=progress)
+
+
 # Bootstrapped weighted rule  + filtering
 
 def compute_sample_weights(sample_rel_otu: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -328,6 +346,9 @@ def filter_sample_graphs_with_bootstrap(
     pearson_edges_per_sample: Optional[Dict[str, np.ndarray]] = None,
     pearson_threshold: float = 0.3,
     pearson_topk: Optional[int] = 10000,
+    spearman_edges_per_sample: Optional[Dict[str, np.ndarray]] = None,
+    spearman_threshold: float = 0.3,
+    spearman_topk: Optional[int] = 10000,
     progress: bool = True,
     write_graphml: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -435,6 +456,36 @@ def filter_sample_graphs_with_bootstrap(
                     pmask = (present_mask[sel[:, 0]] & present_mask[sel[:, 1]])
                     edges_kept_p = int(pmask.sum())
 
+        # Spearman LIONESS graph
+        edges_kept_s = 0
+        if spearman_edges_per_sample is not None and sname in spearman_edges_per_sample:
+            R_s = spearman_edges_per_sample[sname]
+            np.savetxt(s_out / "weights_spearman_lioness.csv", R_s.astype(np.float32, copy=False), delimiter=",", fmt="%.7g")
+
+            sel = np.argwhere(np.abs(R_s) >= spearman_threshold)
+            if sel.size:
+                sel = sel[sel[:, 0] < sel[:, 1]]
+                wts = R_s[sel[:, 0], sel[:, 1]]
+                order = np.argsort(-np.abs(wts))
+                if spearman_topk is not None:
+                    order = order[:spearman_topk]
+                sel = sel[order]
+
+            if write_graphml:
+                G_s = nx.Graph()
+                for i in present:
+                    G_s.add_node(str(species[i]), relab=float(abund[i]))
+                for i, j in sel:
+                    ni, nj = str(species[int(i)]), str(species[int(j)])
+                    if ni in present_set and nj in present_set:
+                        G_s.add_edge(ni, nj, weight=float(R_s[int(i), int(j)]))
+                nx.write_graphml(G_s, s_out / "graph_spearman_lioness.graphml")
+                edges_kept_s = G_s.number_of_edges()
+            else:
+                if sel.size:
+                    smask = (present_mask[sel[:, 0]] & present_mask[sel[:, 1]])
+                    edges_kept_s = int(smask.sum())
+
         # Summaries
         upper_mask = np.zeros_like(W_boot_f, dtype=bool); upper_mask[iu, ju] = True
         pair_present = np.outer(present_mask, present_mask)
@@ -449,6 +500,7 @@ def filter_sample_graphs_with_bootstrap(
             "nodes_out_boot": int(present_mask.sum()),
             "edges_out_boot": edges_kept_boot,
             "edges_out_pearson": edges_kept_p,
+            "edges_out_spearman": edges_kept_s,
         }
         missing_cols = [c for c in species if c not in present_set]
         if missing_cols:
@@ -478,6 +530,9 @@ def run_bootstrap_filtering_per_condition(
     also_build_pearson: bool = True,
     pearson_threshold: float = 0.3,
     pearson_topk: Optional[int] = 10000,
+    also_build_spearman: bool = False,
+    spearman_threshold: float = 0.3,
+    spearman_topk: Optional[int] = 10000,
     progress: bool = True,
     write_graphml: bool = True,
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
@@ -519,6 +574,11 @@ def run_bootstrap_filtering_per_condition(
             print(f"  Computing Pearson LIONESS per-sample matrices for condition '{grp}'...")
             pearson_maps = compute_feature_corr_lioness_fast(df_cond, jobs=jobs, progress=progress)
 
+        spearman_maps = None
+        if also_build_spearman:
+            print(f"  Computing Spearman LIONESS per-sample matrices for condition '{grp}'...")
+            spearman_maps = compute_feature_corr_lioness_spearman(df_cond, jobs=jobs, progress=progress)
+
         filtered_otu, summary_df = filter_sample_graphs_with_bootstrap(
             df_cond,
             boot_means,
@@ -529,6 +589,9 @@ def run_bootstrap_filtering_per_condition(
             pearson_edges_per_sample=pearson_maps,
             pearson_threshold=pearson_threshold,
             pearson_topk=pearson_topk,
+            spearman_edges_per_sample=spearman_maps,
+            spearman_threshold=spearman_threshold,
+            spearman_topk=spearman_topk,
             progress=progress,
             write_graphml=write_graphml,
         )
@@ -566,6 +629,9 @@ def main():
     p_b.add_argument("--seed", type=int, default=42, help="RNG seed for bootstrapping")
     p_b.add_argument("--save-boot-mats", action="store_true", help="Persist per-bootstrap matrices to disk (CSV)")
     p_b.add_argument("--no-pearson", action="store_true", help="Skip Pearson LIONESS graphs")
+    p_b.add_argument("--spearman", action="store_true", help="Build Spearman LIONESS graphs (rank-based, more robust to outliers)")
+    p_b.add_argument("--spearman-threshold", type=float, default=0.3, help="Min |rho| to keep a Spearman edge (default: 0.3)")
+    p_b.add_argument("--spearman-topk", type=int, default=10000, help="Keep at most this many Spearman edges per sample (0=unlimited, default: 10000)")
     p_b.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars")
     p_b.add_argument("--matrices-only", action="store_true",
                      help="Do not build/write GraphML; only save per-sample adjacency matrices (CSV)")
@@ -637,6 +703,9 @@ def main():
             also_build_pearson=not args.no_pearson,
             pearson_threshold=args.pearson_threshold,
             pearson_topk=(None if args.pearson_topk == 0 else args.pearson_topk),
+            also_build_spearman=args.spearman,
+            spearman_threshold=args.spearman_threshold,
+            spearman_topk=(None if args.spearman_topk == 0 else args.spearman_topk),
             progress=show_progress,
             write_graphml=not args.matrices_only,
         )
